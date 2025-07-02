@@ -32,6 +32,15 @@ async function main() {
     console.log("🎯 EntryPoint:", ENTRY_POINT_ADDRESS);
     console.log("");
 
+    // Get network gas price
+    const network = await deployer.provider.getNetwork();
+    const gasPrice = await deployer.provider.getFeeData();
+    console.log("⛽ Network Info:");
+    console.log("================================");
+    console.log("🔗 Chain ID:", network.chainId.toString());
+    console.log("💨 Gas Price:", ethers.formatUnits(gasPrice.gasPrice || 0n, "gwei"), "gwei");
+    console.log("");
+
     // 1. Deploy PhoneRegistry
     console.log("1️⃣ Deploying PhoneRegistry...");
     const PhoneRegistry = await ethers.getContractFactory("PhoneRegistry");
@@ -48,9 +57,9 @@ async function main() {
     const escrowVaultAddress = await escrowVault.getAddress();
     console.log("✅ EscrowVault deployed to:", escrowVaultAddress);
 
-    // 3. Deploy SmartWallet Implementation (FIXED: No more zero address!)
+    // 3. Deploy SmartWallet Implementation 
     console.log("\n3️⃣ Deploying SmartWallet Implementation...");
-    const SmartWallet = await ethers.getContractFactory("SmartWallet");
+    const SmartWallet = await ethers.getContractFactory("contracts/SmartWallet.sol:SmartWallet");
     const smartWalletImplementation = await SmartWallet.deploy(
       deployer.address, // Placeholder owner
       ENTRY_POINT_ADDRESS
