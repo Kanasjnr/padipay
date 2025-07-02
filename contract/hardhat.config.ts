@@ -24,8 +24,9 @@ const config: HardhatUserConfig = {
       url: "https://rpc-quicknode-holesky.morphl2.io",
       chainId: 2810,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      gasPrice: "auto",
-      gas: "auto",
+      gasPrice: 20000000000, // 20 gwei - reasonable for L2
+      gas: 8000000, // 8M gas limit
+      timeout: 60000, // 60 seconds timeout
     },
     
     // Morph Mainnet (for future use)
