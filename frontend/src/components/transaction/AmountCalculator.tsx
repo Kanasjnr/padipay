@@ -221,3 +221,4 @@ const getQuickAmounts = (currency: string): number[] => {
   
   return quickAmounts[currency] || quickAmounts.USD;
 };
+ 
