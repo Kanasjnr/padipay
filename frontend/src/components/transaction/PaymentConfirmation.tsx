@@ -79,11 +79,11 @@ export const PaymentConfirmation: React.FC<PaymentConfirmationProps> = ({
     }
 
     try {
-      return new Intl.NumberFormat('en', {
-        style: 'currency',
-        currency: currency,
-        minimumFractionDigits: currency === 'NGN' || currency === 'KES' ? 0 : 2,
-      }).format(value);
+    return new Intl.NumberFormat('en', {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: currency === 'NGN' || currency === 'KES' ? 0 : 2,
+    }).format(value);
     } catch {
       // Fallback for unrecognized currency codes
       const symbols: Record<string, string> = {
