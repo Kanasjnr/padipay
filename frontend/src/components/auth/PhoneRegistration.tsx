@@ -20,10 +20,11 @@ export const PhoneRegistration: React.FC<PhoneRegistrationProps> = ({ onSuccess,
       return;
     }
 
-    // Basic phone validation
-    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-    if (!phoneRegex.test(phoneNumber.replace(/\s/g, ''))) {
-      setError('Please enter a valid phone number');
+    // Basic phone validation - ensure international format
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    const cleanPhone = phoneNumber.replace(/\s/g, '');
+    if (!phoneRegex.test(cleanPhone)) {
+      setError('Please enter a valid phone number with country code (+1234567890)');
       return;
     }
 
@@ -31,10 +32,22 @@ export const PhoneRegistration: React.FC<PhoneRegistrationProps> = ({ onSuccess,
     setError('');
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      onSuccess(phoneNumber);
-    } catch {
+      // Import and use the PadiPayWallet service
+      const { PadiPayWallet } = await import('@/lib/padiPayWallet');
+      
+      const result = await PadiPayWallet.sendOTP(cleanPhone);
+      
+      if (result.success) {
+        console.log('📱 OTP sent successfully');
+        if (result.otp) {
+          console.log('🔐 Development OTP:', result.otp);
+        }
+        onSuccess(cleanPhone);
+      } else {
+        setError(result.error || 'Failed to send verification code');
+      }
+    } catch (error) {
+      console.error('❌ Phone registration failed:', error);
       setError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);

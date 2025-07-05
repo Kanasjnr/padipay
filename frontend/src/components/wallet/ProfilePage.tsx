@@ -22,22 +22,49 @@ import ProfileManager from '@/components/profile/ProfileManager';
 import SettingsPage from '@/components/wallet/SettingsPage';
 import SecurityCenter from '@/components/wallet/SecurityCenter';
 import HelpCenter from '@/components/support/HelpCenter';
+import { useWallet } from '@/lib/WalletContext';
 
 interface ProfilePageProps {
   onBack: () => void;
+  onLogout?: () => void;
 }
 
-export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
+export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLogout }) => {
   const [currentView, setCurrentView] = useState<'main' | 'edit' | 'settings' | 'security' | 'help'>('main');
   const { success, info } = useToast();
+  const { wallet, isLoading } = useWallet();
   
+  // Get real user info from wallet context
   const userInfo = {
-    name: 'John Doe',
-    phone: '+234 xxx xxx xxxx',
-    walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
-    joinDate: 'January 2024',
-    verified: true
+    name: 'PadiPay User',
+    phone: wallet?.getPhoneNumber() || 'Phone not registered',
+    walletAddress: wallet?.getWalletAddress() || '0x...',
+    verified: wallet ? true : false
   };
+
+  // If wallet is not loaded, show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If no wallet, show error state
+  if (!wallet) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">Wallet not found</p>
+          <Button onClick={onBack}>Go Back</Button>
+        </div>
+      </div>
+    );
+  }
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -158,9 +185,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
                 <Phone size={16} />
                 <span>{userInfo.phone}</span>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
-                Member since {userInfo.joinDate}
-              </p>
             </div>
           </div>
         </CardContent>
@@ -201,17 +225,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
               Copy Address
             </Button>
           </div>
-
-          <div className="grid grid-cols-2 gap-4 pt-2">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">24</p>
-              <p className="text-sm text-gray-600">Transactions</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">6</p>
-              <p className="text-sm text-gray-600">Contacts</p>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
@@ -247,6 +260,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
           <Button
             variant="outline"
             className="w-full text-red-600 border-red-200 hover:bg-red-50"
+            onClick={onLogout}
           >
             <LogOut size={16} className="mr-2" />
             Sign Out

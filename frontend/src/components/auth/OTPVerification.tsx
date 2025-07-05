@@ -40,16 +40,22 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
     setError('');
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Import and use the PadiPayWallet service
+      const { PadiPayWallet } = await import('@/lib/padiPayWallet');
       
-      if (otp === '000000') {
-        setError('Invalid verification code');
-        return;
-      }
+      console.log('🔐 Verifying OTP and creating wallet...');
+      const wallet = await PadiPayWallet.createWallet(phoneNumber, otp);
+      
+      console.log('✅ Wallet created successfully:', wallet.getWalletAddress());
+      
+      // Store wallet data in localStorage for persistence
+      localStorage.setItem('padiPayWallet', JSON.stringify(wallet.getWalletData()));
       
       onSuccess();
-    } catch {
-      setError('Verification failed. Please try again.');
+    } catch (error) {
+      console.error('❌ OTP verification failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Verification failed. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { WalletProvider } from "@/lib/WalletContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -55,9 +56,11 @@ export default function RootLayout({
       >
         <ErrorBoundary>
           <ToastProvider>
-            <div className="min-h-screen w-full max-w-md mx-auto bg-white relative overflow-x-hidden">
-              {children}
-            </div>
+            <WalletProvider>
+              <div className="min-h-screen w-full max-w-md mx-auto bg-white relative overflow-x-hidden">
+                {children}
+              </div>
+            </WalletProvider>
           </ToastProvider>
         </ErrorBoundary>
       </body>
