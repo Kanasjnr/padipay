@@ -42,7 +42,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLogout }) =>
     verified: wallet ? true : false
   };
 
-  // If wallet is not loaded, show loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -54,7 +53,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLogout }) =>
     );
   }
 
-  // If no wallet, show error state
   if (!wallet) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -98,7 +96,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLogout }) =>
     }
   ];
 
-  // Handle different views
   if (currentView === 'edit') {
     return (
       <ProfileManager

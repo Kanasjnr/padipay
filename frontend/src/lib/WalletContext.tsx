@@ -12,6 +12,7 @@ interface WalletContextType {
   loadWallet: () => Promise<void>;
   logout: () => void;
   refreshBalance: () => Promise<void>;
+  diagnoseWallet: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | null>(null);
@@ -97,6 +98,14 @@ export function WalletProvider({ children }: WalletProviderProps) {
     setError(null);
   };
 
+  const diagnoseWallet = async () => {
+    if (!wallet) {
+      console.log('❌ No wallet available for diagnosis');
+      return;
+    }
+    await wallet.diagnoseWalletStatus();
+  };
+
   const contextValue: WalletContextType = {
     wallet,
     balance,
@@ -106,6 +115,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     loadWallet,
     logout,
     refreshBalance,
+    diagnoseWallet,
   };
 
   return (
@@ -146,24 +156,40 @@ export function usePaymentHistory() {
   const { wallet } = useWallet();
   const [history, setHistory] = useState<PaymentHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadHistory = async () => {
-    if (!wallet) return;
+  const refreshHistory = async () => {
+    if (!wallet) {
+      setHistory([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
 
     try {
-      setIsLoading(true);
-      const payments = await wallet.getPaymentHistory();
-      setHistory(payments);
+      console.log('🔄 Fetching payment history...');
+      const paymentHistory = await wallet.getPaymentHistory();
+      console.log('📋 Payment history fetched:', paymentHistory);
+      setHistory(paymentHistory);
     } catch (error) {
-      console.error('❌ Failed to load payment history:', error);
+      console.error('❌ Failed to fetch payment history:', error);
+      setError('Failed to fetch payment history');
+      setHistory([]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Load history when wallet changes
   useEffect(() => {
-    loadHistory();
+    refreshHistory();
   }, [wallet]);
 
-  return { history, isLoading, refreshHistory: loadHistory };
+  return {
+    history,
+    isLoading,
+    error,
+    refreshHistory
+  };
 } 

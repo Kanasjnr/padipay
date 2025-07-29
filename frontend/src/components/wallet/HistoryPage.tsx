@@ -4,103 +4,77 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Search, Filter, Calendar } from 'lucide-react';
+import { usePaymentHistory } from '@/lib/WalletContext';
 
 interface HistoryPageProps {
   onBack: () => void;
 }
 
-const transactions = [
-  {
-    id: '1',
-    type: 'received',
-    amount: 50000,
-    from: '+234 xxx xxx 8901',
-    to: 'You',
-    time: '2 minutes ago',
-    date: '2024-01-15',
-    status: 'completed',
-    hash: '0x1234...5678'
-  },
-  {
-    id: '2',
-    type: 'sent',
-    amount: 25000,
-    from: 'You',
-    to: '+234 xxx xxx 7890',
-    time: '1 hour ago',
-    date: '2024-01-15',
-    status: 'completed',
-    hash: '0x2345...6789'
-  },
-  {
-    id: '3',
-    type: 'received',
-    amount: 100000,
-    from: '+234 xxx xxx 2345',
-    to: 'You',
-    time: '3 hours ago',
-    date: '2024-01-15',
-    status: 'completed',
-    hash: '0x3456...7890'
-  },
-  {
-    id: '4',
-    type: 'sent',
-    amount: 75000,
-    from: 'You',
-    to: '+234 xxx xxx 3456',
-    time: '1 day ago',
-    date: '2024-01-14',
-    status: 'completed',
-    hash: '0x4567...8901'
-  },
-  {
-    id: '5',
-    type: 'received',
-    amount: 30000,
-    from: '+234 xxx xxx 4567',
-    to: 'You',
-    time: '2 days ago',
-    date: '2024-01-13',
-    status: 'completed',
-    hash: '0x5678...9012'
-  },
-  {
-    id: '6',
-    type: 'sent',
-    amount: 15000,
-    from: 'You',
-    to: '+234 xxx xxx 5678',
-    time: '3 days ago',
-    date: '2024-01-12',
-    status: 'pending',
-    hash: '0x6789...0123'
-  }
-];
-
 export const HistoryPage: React.FC<HistoryPageProps> = ({ onBack }) => {
   const [filter, setFilter] = useState<'all' | 'sent' | 'received'>('all');
+  const { history, isLoading, refreshHistory } = usePaymentHistory();
 
-  const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-NG', {
+  const formatAmount = (amount: string) => {
+    const numAmount = parseFloat(amount);
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'NGN',
-      minimumFractionDigits: 0
-    }).format(amount);
+      currency: 'USD',
+      minimumFractionDigits: 2
+    }).format(numAmount).replace('$', 'USDT ');
   };
 
-  const filteredTransactions = transactions.filter(tx => {
+  const formatTime = (timestamp: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - timestamp.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (minutes < 60) {
+      return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+    } else if (hours < 24) {
+      return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+    } else {
+      return `${days} day${days !== 1 ? 's' : ''} ago`;
+    }
+  };
+
+  const filteredTransactions = history.filter(tx => {
     if (filter === 'all') return true;
     return tx.type === filter;
   });
 
-  const totalSent = transactions
+  const totalSent = history
     .filter(tx => tx.type === 'sent')
-    .reduce((sum, tx) => sum + tx.amount, 0);
+    .reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
 
-  const totalReceived = transactions
+  const totalReceived = history
     .filter(tx => tx.type === 'received')
-    .reduce((sum, tx) => sum + tx.amount, 0);
+    .reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4 pb-24">
+        <div className="flex items-center space-x-4 mb-6 pt-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onBack}
+            className="rounded-full"
+          >
+            <ArrowLeft size={20} />
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-gray-900">Transaction History</h1>
+            <p className="text-gray-600">Loading your transactions...</p>
+          </div>
+        </div>
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 pb-24">
@@ -118,7 +92,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ onBack }) => {
           <h1 className="text-2xl font-bold text-gray-900">Transaction History</h1>
           <p className="text-gray-600">All your PadiPay transactions</p>
         </div>
-        <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" onClick={refreshHistory}>
           <Search size={20} />
         </Button>
       </div>
@@ -131,7 +105,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ onBack }) => {
               <ArrowDownLeft size={16} className="text-green-600" />
               <span className="text-sm font-medium text-green-700">Received</span>
             </div>
-            <p className="text-2xl font-bold text-green-900">{formatAmount(totalReceived)}</p>
+            <p className="text-2xl font-bold text-green-900">{formatAmount(totalReceived.toString())}</p>
           </CardContent>
         </Card>
 
@@ -141,7 +115,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ onBack }) => {
               <ArrowUpRight size={16} className="text-red-600" />
               <span className="text-sm font-medium text-red-700">Sent</span>
             </div>
-            <p className="text-2xl font-bold text-red-900">{formatAmount(totalSent)}</p>
+            <p className="text-2xl font-bold text-red-900">{formatAmount(totalSent.toString())}</p>
           </CardContent>
         </Card>
       </div>
@@ -181,57 +155,66 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ onBack }) => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {filteredTransactions.map((transaction, index) => (
-            <div key={transaction.id}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    transaction.type === 'received' 
-                      ? 'bg-green-100 text-green-600' 
-                      : 'bg-red-100 text-red-600'
-                  }`}>
-                    {transaction.type === 'received' ? (
-                      <ArrowDownLeft size={20} />
-                    ) : (
-                      <ArrowUpRight size={20} />
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <p className="font-medium text-gray-900">
-                        {transaction.type === 'received' ? 'Received from' : 'Sent to'}
-                      </p>
-                      <Badge 
-                        variant={transaction.status === 'completed' ? 'default' : 'secondary'}
-                        className={`text-xs ${
-                          transaction.status === 'completed' 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}
-                      >
-                        {transaction.status}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-gray-600">
-                      {transaction.type === 'received' ? transaction.from : transaction.to}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {transaction.hash}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={`font-semibold ${
-                    transaction.type === 'received' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {transaction.type === 'received' ? '+' : '-'}{formatAmount(transaction.amount)}
-                  </p>
-                  <p className="text-xs text-gray-500">{transaction.time}</p>
-                </div>
-              </div>
-              {index < filteredTransactions.length - 1 && <Separator className="mt-4" />}
+          {filteredTransactions.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No transactions found</p>
+              <p className="text-sm">Make your first payment to see transaction history</p>
             </div>
-          ))}
+          ) : (
+            filteredTransactions.map((transaction, index) => (
+              <div key={transaction.id}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      transaction.type === 'received' 
+                        ? 'bg-green-100 text-green-600' 
+                        : 'bg-red-100 text-red-600'
+                    }`}>
+                      {transaction.type === 'received' ? (
+                        <ArrowDownLeft size={20} />
+                      ) : (
+                        <ArrowUpRight size={20} />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <p className="font-medium text-gray-900">
+                          {transaction.type === 'received' ? 'Received from' : 'Sent to'}
+                        </p>
+                        <Badge 
+                          variant={transaction.claimed ? 'default' : 'secondary'}
+                          className={`text-xs ${
+                            transaction.claimed 
+                              ? 'bg-green-100 text-green-700' 
+                              : transaction.isEscrowed 
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {transaction.claimed ? 'completed' : transaction.isEscrowed ? 'escrowed' : 'pending'}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {transaction.type === 'received' ? transaction.sender : `***${transaction.recipientPhoneHash.slice(-6)}`}
+                      </p>
+                                             {transaction.message && (
+                         <p className="text-xs text-gray-500 italic">&quot;{transaction.message}&quot;</p>
+                       )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-semibold ${
+                      transaction.type === 'received' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {transaction.type === 'received' ? '+' : '-'}{formatAmount(transaction.amount)}
+                    </p>
+                    <p className="text-xs text-gray-500">{formatTime(transaction.timestamp)}</p>
+                  </div>
+                </div>
+                {index < filteredTransactions.length - 1 && <Separator className="mt-4" />}
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
     </div>

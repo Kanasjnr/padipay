@@ -105,8 +105,20 @@ export class PadiPayWallet {
         provider.getBalance(this.walletData.walletAddress)
       ]);
 
+      // Debug: Log the raw balance and check decimals
+      console.log('📊 Raw USDT balance from contract:', usdtBalance.toString());
+      
+      // Check USDT contract decimals to ensure we're using the right formatting
+      const usdtDecimals = await this.contracts.usdt.decimals();
+      console.log('📊 USDT contract decimals:', usdtDecimals.toString());
+      
+      // Format with correct decimals
+      const correctlyFormattedBalance = ethers.formatUnits(usdtBalance, usdtDecimals);
+      console.log('📊 Correctly formatted USDT balance:', correctlyFormattedBalance);
+      console.log('📊 formatUSDT result:', formatUSDT(usdtBalance));
+
       return {
-        usdt: formatUSDT(usdtBalance),
+        usdt: correctlyFormattedBalance,
         eth: ethers.formatEther(ethBalance)
       };
     } catch (error) {
@@ -146,10 +158,11 @@ export class PadiPayWallet {
       await approveTx.wait();
       console.log('✅ USDT spending approved');
 
-      // Send payment via PadiPayCore
+      // Send payment via PadiPayCore - FIX: Add token address parameter
       console.log('💰 Sending payment...');
       const paymentTx = await this.contracts.padiPayCore.sendPayment(
         recipientPhoneHash,
+        this.contracts.usdt.target, // Add token address parameter
         amountInUnits,
         message,
         { gasLimit: 300000 }
@@ -185,22 +198,47 @@ export class PadiPayWallet {
   // Get payment history for this wallet
   async getPaymentHistory(): Promise<PaymentHistoryItem[]> {
     try {
+      console.log('🔍 Getting payment history for wallet:', this.walletData.walletAddress);
+      console.log('🔍 Phone number:', this.walletData.phoneNumber);
+      
+      // Check if phone is registered
+      const phoneHash = hashPhoneNumber(this.walletData.phoneNumber);
+      console.log('📞 Phone hash:', phoneHash);
+      
+      const isRegistered = await this.contracts.phoneRegistry.isPhoneNumberRegistered(phoneHash);
+      console.log('📝 Phone registered:', isRegistered);
+      
+      const registeredWallet = await this.contracts.phoneRegistry.getWalletByPhone(phoneHash);
+      console.log('🏠 Registered wallet address:', registeredWallet);
+      
+      // Check pending amount
+      const pendingAmount = await this.contracts.padiPayCore.getPendingAmount(
+        phoneHash,
+        this.contracts.usdt.target
+      );
+      console.log('⏳ Pending amount:', formatUSDT(pendingAmount));
+      
       // Get sent payments
       const sentPaymentIds = await this.contracts.padiPayCore.getPaymentsBySender(
         this.walletData.walletAddress
       );
+      console.log('📤 Sent payment IDs:', sentPaymentIds);
 
       // Get received payments
-      const phoneHash = hashPhoneNumber(this.walletData.phoneNumber);
       const receivedPaymentIds = await this.contracts.padiPayCore.getPaymentsByPhone(phoneHash);
+      console.log('📥 Received payment IDs:', receivedPaymentIds);
 
       // Fetch payment details
       const allPaymentIds = [...sentPaymentIds, ...receivedPaymentIds];
+      console.log('📋 Total payment IDs:', allPaymentIds);
       const payments = [];
 
       for (const paymentId of allPaymentIds) {
         try {
-          const payment = await this.contracts.padiPayCore.getPayment(paymentId);
+          console.log(`🔍 Fetching payment details for ID: ${paymentId}`);
+          const payment = await this.contracts.padiPayCore.payments(paymentId);
+          console.log(`📝 Payment ${paymentId} details:`, payment);
+          
           payments.push({
             id: paymentId.toString(),
             sender: payment.sender,
@@ -217,6 +255,7 @@ export class PadiPayWallet {
         }
       }
 
+      console.log('📊 Final payment history:', payments);
       // Sort by timestamp (newest first)
       return payments.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
@@ -233,8 +272,8 @@ export class PadiPayWallet {
       
       const phoneHash = hashPhoneNumber(this.walletData.phoneNumber);
       
-      // Check if there are any escrowed payments
-      const claimableAmount = await this.contracts.escrowVault.getClaimableAmount(
+      // Check if there are any escrowed payments using PadiPayCore
+      const claimableAmount = await this.contracts.padiPayCore.getPendingAmount(
         phoneHash,
         this.contracts.usdt.target
       );
@@ -243,7 +282,7 @@ export class PadiPayWallet {
         return { success: false, error: 'No escrowed payments to claim' };
       }
 
-      // Claim the payments
+      // Claim the payments through EscrowVault
       const claimTx = await this.contracts.escrowVault.claimFunds(
         phoneHash,
         this.contracts.usdt.target,
@@ -270,7 +309,8 @@ export class PadiPayWallet {
   async getPendingAmount(): Promise<string> {
     try {
       const phoneHash = hashPhoneNumber(this.walletData.phoneNumber);
-      const pendingAmount = await this.contracts.escrowVault.getClaimableAmount(
+      // Fix: Use getPendingAmount from PadiPayCore instead of getClaimableAmount from EscrowVault
+      const pendingAmount = await this.contracts.padiPayCore.getPendingAmount(
         phoneHash,
         this.contracts.usdt.target
       );
@@ -278,6 +318,49 @@ export class PadiPayWallet {
     } catch (error) {
       console.error('❌ Failed to get pending amount:', error);
       return '0';
+    }
+  }
+
+  // Diagnostic: Check wallet and phone registration status
+  async diagnoseWalletStatus(): Promise<void> {
+    try {
+      console.log('🔍 === WALLET DIAGNOSTICS ===');
+      console.log('📱 Current wallet address:', this.walletData.walletAddress);
+      console.log('📞 Phone number:', this.walletData.phoneNumber);
+      
+      const phoneHash = hashPhoneNumber(this.walletData.phoneNumber);
+      console.log('🔢 Phone hash:', phoneHash);
+      
+      const isRegistered = await this.contracts.phoneRegistry.isPhoneNumberRegistered(phoneHash);
+      console.log('✅ Phone registered:', isRegistered);
+      
+      if (isRegistered) {
+        const registeredWallet = await this.contracts.phoneRegistry.getWalletByPhone(phoneHash);
+        console.log('🏠 Registered wallet address:', registeredWallet);
+        
+        const isCorrectWallet = registeredWallet.toLowerCase() === this.walletData.walletAddress.toLowerCase();
+        console.log('🎯 Phone registered to current wallet:', isCorrectWallet);
+        
+        if (!isCorrectWallet) {
+          console.log('⚠️  ISSUE: Phone is registered to a different wallet!');
+          console.log('💡 SOLUTION: You may need to re-register your phone or use the correct wallet');
+        }
+      }
+      
+      // Check direct USDT balance
+      const usdtBalance = await this.contracts.usdt.balanceOf(this.walletData.walletAddress);
+      console.log('💰 Direct USDT balance:', formatUSDT(usdtBalance));
+      
+      // Check pending payments
+      const pendingAmount = await this.contracts.padiPayCore.getPendingAmount(
+        phoneHash,
+        this.contracts.usdt.target
+      );
+      console.log('⏳ Pending PadiPay amount:', formatUSDT(pendingAmount));
+      
+      console.log('🔍 === END DIAGNOSTICS ===');
+    } catch (error) {
+      console.error('❌ Diagnostic failed:', error);
     }
   }
 

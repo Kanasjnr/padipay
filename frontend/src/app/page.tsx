@@ -21,17 +21,17 @@ type TabState = 'home' | 'send' | 'history' | 'profile' | 'settings' | 'help';
 export default function Home() {
   // Check authentication status immediately
   const getInitialState = (): AppState => {
-    if (typeof window === 'undefined') return 'onboarding'; // SSR safety
+    if (typeof window === 'undefined') return 'onboarding'; 
     
     const hasWallet = localStorage.getItem('padiPayWallet');
     const hasPin = localStorage.getItem('padiPayPinHash');
     const isAuthenticated = localStorage.getItem('padiPayAuthenticated');
     
     if (hasWallet && hasPin && isAuthenticated === 'true') {
-      return 'app'; // User is authenticated, go directly to app
+      return 'app'; 
     }
     
-    return 'onboarding'; // Everyone else sees onboarding first
+    return 'onboarding'; 
   };
 
   const [appState, setAppState] = useState<AppState>(getInitialState);

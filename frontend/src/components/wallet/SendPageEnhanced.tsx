@@ -1,26 +1,27 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { ArrowLeft, Users } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/toast';
-import { LoadingButton, TransactionProcessing } from '@/components/ui/loading';
-import { InlineError } from '@/components/ui/error-boundary';
-
+import { PhoneInputWithCountry } from '@/components/forms/PhoneInputWithCountry';
+import { CurrencyAmountInput } from '@/components/forms/CurrencyAmountInput';
 import { PaymentConfirmation } from '@/components/transaction/PaymentConfirmation';
 import { TransactionSuccess } from '@/components/transaction/TransactionSuccess';
 import { TransactionFailure } from '@/components/transaction/TransactionFailure';
-import { PhoneInputWithCountry } from '@/components/forms/PhoneInputWithCountry';
-import { CurrencyAmountInput } from '@/components/forms/CurrencyAmountInput';
+import { usePayment } from '@/lib/WalletContext';
 
 interface SendPageEnhancedProps {
   onBack: () => void;
 }
 
+// Define types
 type SendStep = 'input' | 'confirmation' | 'success' | 'failure';
 
 interface Country {
-  code: string;
   name: string;
+  code: string;
   flag: string;
   prefix: string;
 }
@@ -42,10 +43,10 @@ const recentContacts = [
 ];
 
 const currencies: Currency[] = [
+  { code: 'USDT', name: 'Tether USD', symbol: 'USDT', flag: '₮', decimals: 2, locale: 'en-US' },
   { code: 'NGN', name: 'Nigerian Naira', symbol: '₦', flag: '🇳🇬', decimals: 0, locale: 'en-NG' },
   { code: 'KES', name: 'Kenyan Shilling', symbol: 'KSh', flag: '🇰🇪', decimals: 0, locale: 'en-KE' },
   { code: 'GHS', name: 'Ghanaian Cedi', symbol: '₵', flag: '🇬🇭', decimals: 2, locale: 'en-GH' },
-  { code: 'USDT', name: 'Tether USD', symbol: 'USDT', flag: '₮', decimals: 2, locale: 'en-US' },
 ];
 
 export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) => {
@@ -54,11 +55,13 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [amount, setAmount] = useState('');
   const [formattedAmount, setFormattedAmount] = useState('');
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency>(currencies[0]);
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>(currencies[0]); // Default to USDT
   const [loading, setLoading] = useState(false);
   const [transactionId, setTransactionId] = useState('');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState(''); // Add message state
   const { success, error: showError } = useToast();
+  const { sendPayment } = usePayment(); // Use real payment hook
 
   // Mock user balance
   const userBalance = 175000;
@@ -93,6 +96,10 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
       setError('Please enter a valid amount');
       return false;
     }
+    if (selectedCurrency.code !== 'USDT') {
+      setError('Currently only USDT payments are supported');
+      return false;
+    }
     return true;
   };
 
@@ -103,28 +110,33 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
     }
   };
 
-  // Handle payment confirmation
+  // Handle payment confirmation - Updated to use real payment
   const handleConfirmPayment = async () => {
     setLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log('💸 Starting payment:', { phoneNumber, amount, message });
       
-      // Generate transaction ID
-      const txId = 'TX' + Date.now().toString().slice(-8);
-      setTransactionId(txId);
+      // Call the real payment function
+      const result = await sendPayment(phoneNumber, amount, message || '');
       
-      // Simulate random success/failure for demo
-      const isSuccess = Math.random() > 0.3; // 70% success rate
-      
-      if (isSuccess) {
+      if (result.success) {
+        console.log('✅ Payment successful:', result);
+        setTransactionId(result.transactionHash || 'TX' + Date.now().toString().slice(-8));
         setCurrentStep('success');
+        success('Payment sent successfully!', 'Your payment has been processed');
       } else {
+        console.error('❌ Payment failed:', result.error);
+        setError(result.error || 'Payment failed');
         setCurrentStep('failure');
+        showError('Payment failed', result.error || 'An error occurred while processing your payment');
       }
-    } catch {
+    } catch (error) {
+      console.error('❌ Payment error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      setError(errorMessage);
       setCurrentStep('failure');
+      showError('Payment failed', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -167,13 +179,14 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
       convertedAmount: 'USDT ' + (parseFloat(amount) * 0.0016).toFixed(2),
     } : undefined,
     fees: {
-      networkFee: 0.5,
-      serviceFee: parseFloat(amount) * 0.01,
-      total: 0.5 + (parseFloat(amount) * 0.01),
+      networkFee: 0.5, // Mock fee - real fees calculated by contract
+      serviceFee: parseFloat(amount) * 0.02, // 2% platform fee
+      total: 0.5 + (parseFloat(amount) * 0.02),
       currency: selectedCurrency.code,
     },
     estimatedTime: '2-5 minutes',
     reference: 'REF' + Date.now().toString().slice(-6),
+    message: message,
   };
 
   // Prepare transaction data for success/failure screens
@@ -191,9 +204,9 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
   const failureData = {
     ...transactionData,
     error: {
-      code: 'ERR_NETWORK_001',
-      message: 'Network connection failed',
-      reason: 'network_error' as const,
+      code: 'ERR_PAYMENT_001',
+      message: error || 'Payment processing failed',
+      reason: 'unknown' as const,
     },
   };
 
