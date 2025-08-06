@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Users } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+
 import { useToast } from '@/components/ui/toast';
 import { PhoneInputWithCountry } from '@/components/forms/PhoneInputWithCountry';
 import { CurrencyAmountInput } from '@/components/forms/CurrencyAmountInput';
 import { PaymentConfirmation } from '@/components/transaction/PaymentConfirmation';
 import { TransactionSuccess } from '@/components/transaction/TransactionSuccess';
 import { TransactionFailure } from '@/components/transaction/TransactionFailure';
-import { usePayment } from '@/lib/WalletContext';
+import { BackendApproval } from '@/components/wallet/BackendApproval';
+import { usePayment, useWallet } from '@/lib/WalletContext';
 
 interface SendPageEnhancedProps {
   onBack: () => void;
 }
 
 // Define types
-type SendStep = 'input' | 'confirmation' | 'success' | 'failure';
+type SendStep = 'input' | 'confirmation' | 'approval' | 'success' | 'failure';
 
 interface Country {
   name: string;
@@ -35,12 +35,21 @@ interface Currency {
   locale: string;
 }
 
-const recentContacts = [
-  { name: 'Kemi Adebayo', phone: '+234 xxx xxx 8901', country: '🇳🇬', avatar: 'KA' },
-  { name: 'John Mwangi', phone: '+254 xxx xxx 7890', country: '🇰🇪', avatar: 'JM' },
-  { name: 'Aisha Mohammed', phone: '+233 xxx xxx 2345', country: '🇬🇭', avatar: 'AM' },
-  { name: 'David Okello', phone: '+256 xxx xxx 3456', country: '🇺🇬', avatar: 'DO' },
-];
+interface PaymentResultWithApproval {
+  success: boolean;
+  error?: string;
+  transactionHash?: string;
+  requiredApproval?: {
+    contract: string;
+    spender: string;
+    amount: string;
+  };
+  details?: string;
+  instructions?: string;
+  explanation?: string;
+}
+
+
 
 const currencies: Currency[] = [
   { code: 'USDT', name: 'Tether USD', symbol: 'USDT', flag: '₮', decimals: 2, locale: 'en-US' },
@@ -60,12 +69,31 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
   const [transactionId, setTransactionId] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState(''); // Add message state
+  const [approvalData, setApprovalData] = useState<{contract: string; spender: string; amount: string} | null>(null); // Store approval requirements
   const { success, error: showError } = useToast();
   const { sendPayment } = usePayment(); // Use real payment hook
+  const { balance } = useWallet();
 
-  // Mock user balance
-  const userBalance = 175000;
-  const balanceCurrency = 'NGN';
+  // Get real user balance in USDT
+  const userBalance = balance?.usdt ? parseFloat(balance.usdt) : 0;
+  const balanceCurrency = 'USDT';
+
+  // Calculate fees for Account Abstraction
+  const calculateFees = () => {
+    const amountValue = parseFloat(amount) || 0;
+    
+    // Service fee calculation (reasonable for small payments)
+    const feePercentage = 2; // 2%
+    const minimumFeeUSDT = 0.05; // $0.05 minimum fee (reasonable for small payments)
+    const percentageFee = (amountValue * feePercentage) / 100;
+    const serviceFee = Math.max(percentageFee, minimumFeeUSDT);
+    
+    return {
+      networkFee: 0,        // ✅ FREE - Backend sponsors gas!
+      serviceFee: serviceFee, // 📊 Actual PadiPayCore service fee
+      total: serviceFee     // Total fees user pays
+    };
+  };
 
   // Handle phone number input
   const handlePhoneNumberChange = (phone: string, country: Country) => {
@@ -100,6 +128,15 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
       setError('Currently only USDT payments are supported');
       return false;
     }
+    
+    // Check if user has enough balance including fees
+    const fees = calculateFees();
+    const totalRequired = parseFloat(amount) + fees.total;
+    if (totalRequired > userBalance) {
+      setError(`Insufficient balance. You need ${totalRequired.toFixed(2)} USDT (${parseFloat(amount).toFixed(2)} + ${fees.total.toFixed(2)} fees)`);
+      return false;
+    }
+    
     return true;
   };
 
@@ -127,9 +164,17 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
         success('Payment sent successfully!', 'Your payment has been processed');
       } else {
         console.error('❌ Payment failed:', result.error);
-        setError(result.error || 'Payment failed');
-        setCurrentStep('failure');
-        showError('Payment failed', result.error || 'An error occurred while processing your payment');
+        
+        // Check if it's an approval error
+        if ((result as PaymentResultWithApproval).requiredApproval) {
+          console.log('🔐 Backend approval required:', (result as PaymentResultWithApproval).requiredApproval);
+          setApprovalData((result as PaymentResultWithApproval).requiredApproval!);
+          setCurrentStep('approval');
+        } else {
+          setError(result.error || 'Payment failed');
+          setCurrentStep('failure');
+          showError('Payment failed', result.error || 'An error occurred while processing your payment');
+        }
       }
     } catch (error) {
       console.error('❌ Payment error:', error);
@@ -159,11 +204,12 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
   };
 
   // Prepare payment details for confirmation
+  const calculatedFees = calculateFees();
   const paymentDetails = {
     recipient: {
-      name: recentContacts.find(c => c.phone === phoneNumber)?.name,
+      name: undefined, // No name lookup without contacts
       phone: phoneNumber,
-      avatar: recentContacts.find(c => c.phone === phoneNumber)?.avatar,
+      avatar: undefined, // No avatar without contacts
       country: selectedCountry?.name || 'Unknown',
       countryFlag: selectedCountry?.flag || '🌍',
     },
@@ -172,20 +218,15 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
       currency: selectedCurrency.code,
       formatted: formattedAmount,
     },
-    exchangeRate: selectedCurrency.code !== 'USDT' ? {
-      from: selectedCurrency.code,
-      to: 'USDT',
-      rate: 0.0016, // Mock rate
-      convertedAmount: 'USDT ' + (parseFloat(amount) * 0.0016).toFixed(2),
-    } : undefined,
+    exchangeRate: undefined, // Only USDT supported
     fees: {
-      networkFee: 0.5, // Mock fee - real fees calculated by contract
-      serviceFee: parseFloat(amount) * 0.02, // 2% platform fee
-      total: 0.5 + (parseFloat(amount) * 0.02),
+      networkFee: calculatedFees.networkFee,
+      serviceFee: calculatedFees.serviceFee,
+      total: calculatedFees.total,
       currency: selectedCurrency.code,
     },
     estimatedTime: '2-5 minutes',
-    reference: 'REF' + Date.now().toString().slice(-6),
+    reference: `TX${Date.now().toString().slice(-6)}`,
     message: message,
   };
 
@@ -204,7 +245,7 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
   const failureData = {
     ...transactionData,
     error: {
-      code: 'ERR_PAYMENT_001',
+      code: 'PAYMENT_FAILED',
       message: error || 'Payment processing failed',
       reason: 'unknown' as const,
     },
@@ -221,6 +262,19 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
           loading={loading}
           userBalance={userBalance}
           balanceCurrency={balanceCurrency}
+        />
+      );
+
+    case 'approval':
+      if (!approvalData) return null;
+      return (
+        <BackendApproval
+          requiredApproval={approvalData}
+          onBack={handleBackToInput}
+          onApprovalComplete={() => {
+            setApprovalData(null);
+            setCurrentStep('confirmation');
+          }}
         />
       );
 
@@ -259,44 +313,11 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
             </Button>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Send Money</h1>
-              <p className="text-sm text-gray-600">Enhanced with new components</p>
+              <p className="text-sm text-gray-600">Send USDT to any phone number</p>
             </div>
           </div>
 
           <div className="space-y-6">
-            {/* Quick Contacts */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center">
-                  <Users size={18} className="mr-2 text-indigo-600" />
-                  Quick Send
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex space-x-3 overflow-x-auto pb-2">
-                  {recentContacts.map((contact, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handlePhoneNumberChange(contact.phone, {
-                        code: contact.country,
-                        name: contact.name,
-                        flag: contact.country,
-                        prefix: contact.phone.split(' ')[0]
-                      })}
-                      className="flex-shrink-0 flex flex-col items-center space-y-2 p-3 rounded-xl hover:bg-gray-50 transition-colors min-w-[80px]"
-                    >
-                      <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center relative">
-                        <span className="text-indigo-600 font-semibold text-xs">{contact.avatar}</span>
-                        <span className="absolute -bottom-1 -right-1 text-xs">{contact.country}</span>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs font-medium text-gray-900 truncate w-16">{contact.name.split(' ')[0]}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
 
             {/* Phone Input */}
             <Card>
@@ -327,8 +348,8 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
                   onAmountChange={handleAmountChange}
                   onCurrencyChange={handleCurrencyChange}
                   availableCurrencies={currencies}
-                  maxAmount={1000000}
-                  minAmount={100}
+                  maxAmount={userBalance > 0 ? userBalance : 10000}
+                  minAmount={1}
                   error={error && !phoneNumber ? error : undefined}
                 />
 
@@ -344,11 +365,70 @@ export const SendPageEnhanced: React.FC<SendPageEnhancedProps> = ({ onBack }) =>
               </CardContent>
             </Card>
 
+            {/* Optional Message */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Message (Optional)</CardTitle>
+                <CardDescription>Add a note to your payment</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Enter a message for the recipient..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={3}
+                  maxLength={100}
+                />
+                <p className="text-xs text-gray-500 mt-1">{message.length}/100 characters</p>
+              </CardContent>
+            </Card>
+
+            {/* Balance Info */}
+            {amount && parseFloat(amount) > 0 && (
+              <Card className="bg-blue-50 border-blue-200">
+                <CardContent className="p-4">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Send Amount:</span>
+                      <span className="font-medium">USDT {parseFloat(amount).toFixed(2)}</span>
+                    </div>
+                     <div className="flex justify-between text-green-600">
+                       <span className="text-sm">All Fees:</span>
+                       <span className="text-sm font-medium">FREE 🚀 (Account Abstraction)</span>
+                     </div>
+                     <div className="flex justify-between text-green-600">
+                       <span className="text-sm">Gas Fee:</span>
+                       <span className="text-sm font-medium">FREE ✨ (Paymaster Sponsored)</span>
+                     </div>
+                    <div className="flex justify-between border-t pt-2">
+                      <span className="font-medium">Total Needed:</span>
+                      <span className="font-bold">USDT {(parseFloat(amount) + calculateFees().total).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Your Balance:</span>
+                      <span className={`font-medium ${
+                        (parseFloat(amount) + calculateFees().total) > userBalance 
+                          ? 'text-red-600' 
+                          : 'text-green-600'
+                      }`}>
+                        USDT {userBalance.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Continue Button */}
             <Button
               onClick={handleContinue}
-              disabled={!phoneNumber || !amount || parseFloat(amount) <= 0}
+              disabled={
+                !phoneNumber || 
+                !amount || 
+                parseFloat(amount) <= 0 ||
+                (parseFloat(amount) + calculateFees().total) > userBalance
+              }
               className="w-full h-12 text-lg font-semibold"
               size="lg"
             >

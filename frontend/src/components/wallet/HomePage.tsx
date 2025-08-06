@@ -1,51 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
-import { 
-  Eye, 
-  EyeOff, 
-  Send, 
-  QrCode, 
-  History, 
-  Bell, 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  RefreshCw
-} from 'lucide-react';
-import { useToast } from '@/components/ui/toast';
-import { useWallet } from '@/lib/WalletContext';
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import {
+  Eye,
+  EyeOff,
+  Send,
+  QrCode,
+  History,
+  Bell,
+  ArrowUpRight,
+  ArrowDownLeft,
+  RefreshCw,
+} from "lucide-react";
+import { useToast } from "@/components/ui/toast";
+import { useWallet, usePaymentHistory } from "@/lib/WalletContext";
 
 interface HomePageProps {
-  onNavigate: (page: 'send' | 'history' | 'profile' | 'settings' | 'help') => void;
+  onNavigate: (
+    page: "send" | "history" | "profile" | "settings" | "help"
+  ) => void;
 }
-
-const recentTransactions = [
-  {
-    id: "1",
-    type: "received",
-    amount: 50000,
-    from: "+234 xxx xxx 8901",
-    time: "2 minutes ago",
-    status: "completed",
-  },
-  {
-    id: "2",
-    type: "sent",
-    amount: 25000,
-    to: "+234 xxx xxx 7890",
-    time: "1 hour ago",
-    status: "completed",
-  },
-  {
-    id: "3",
-    type: "received",
-    amount: 100000,
-    from: "+234 xxx xxx 2345",
-    time: "3 hours ago",
-    status: "completed",
-  },
-];
 
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [balanceVisible, setBalanceVisible] = useState(true);
@@ -53,19 +28,23 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [refreshing, setRefreshing] = useState(false);
   const { success, info } = useToast();
   const { balance, refreshBalance, diagnoseWallet } = useWallet();
-  
+  const { history: paymentHistory } = usePaymentHistory();
+
+  // Get recent transactions (limit to 3 most recent)
+  const recentTransactions = paymentHistory.slice(0, 3);
+
   // Use real balance data from wallet
   const usdtBalance = balance?.usdt ? parseFloat(balance.usdt) : 0;
-  
+
   // Debug: Log the balance values
-  console.log('🏠 HomePage - Raw balance object:', balance);
-  console.log('🏠 HomePage - USDT balance string:', balance?.usdt);
-  console.log('🏠 HomePage - USDT balance parsed:', usdtBalance);
-  
+  console.log("🏠 HomePage - Raw balance object:", balance);
+  console.log("🏠 HomePage - USDT balance string:", balance?.usdt);
+  console.log("🏠 HomePage - USDT balance parsed:", usdtBalance);
+
   // Debug: Log the balance values
-  console.log('🏠 HomePage - Raw balance object:', balance);
-  console.log('🏠 HomePage - USDT balance string:', balance?.usdt);
-  console.log('🏠 HomePage - USDT balance parsed:', usdtBalance);
+  console.log("🏠 HomePage - Raw balance object:", balance);
+  console.log("🏠 HomePage - USDT balance string:", balance?.usdt);
+  console.log("🏠 HomePage - USDT balance parsed:", usdtBalance);
 
   // Simulate loading
   useEffect(() => {
@@ -81,24 +60,42 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       await refreshBalance();
       success("Wallet refreshed", "Your balance has been updated");
     } catch (error) {
-      console.error('Refresh failed:', error);
+      console.error("Refresh failed:", error);
     } finally {
       setRefreshing(false);
     }
   };
 
   const handleDiagnose = async () => {
-    console.log('🔍 Running wallet diagnostics...');
+    console.log("🔍 Running wallet diagnostics...");
     await diagnoseWallet();
   };
 
-
-  const formatAmount = (amount: number) => {
+  const formatAmount = (amount: string | number) => {
+    const numAmount = typeof amount === "string" ? parseFloat(amount) : amount;
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
-    }).format(amount).replace('$', 'USDT ');
+    })
+      .format(numAmount)
+      .replace("$", "USDT ");
+  };
+
+  const formatTime = (timestamp: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - timestamp.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (minutes < 60) {
+      return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+    } else if (hours < 24) {
+      return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+    } else {
+      return `${days} day${days !== 1 ? "s" : ""} ago`;
+    }
   };
 
   if (loading) {
@@ -127,7 +124,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             disabled={refreshing}
             className="rounded-full"
           >
-            <RefreshCw size={20} className={refreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={20} className={refreshing ? "animate-spin" : ""} />
           </Button>
           <Button
             variant="ghost"
@@ -161,19 +158,15 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 {balanceVisible ? <EyeOff size={20} /> : <Eye size={20} />}
               </Button>
             </div>
-            
+
             <div className="space-y-2">
               <h2 className="text-3xl font-bold">
                 {balanceVisible ? formatAmount(usdtBalance) : "****"}
               </h2>
-              <p className="text-blue-100 text-sm">
-                Available for sending
-              </p>
+              <p className="text-blue-100 text-sm">Available for sending</p>
             </div>
           </CardContent>
         </Card>
-
-
       </div>
 
       {/* Quick Actions */}
@@ -203,7 +196,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         </button>
 
         <button
-          onClick={() => info("Coming Soon", "Bill payments feature coming soon")}
+          onClick={() =>
+            info("Coming Soon", "Bill payments feature coming soon")
+          }
           className="bg-orange-600 hover:bg-orange-700 text-white p-4 rounded-xl flex flex-col items-center space-y-2 transition-all transform hover:scale-105"
         >
           <Bell size={24} />
@@ -227,42 +222,71 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {recentTransactions.map((transaction, index) => (
-            <div key={transaction.id}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    transaction.type === 'received' 
-                      ? 'bg-green-100 text-green-600' 
-                      : 'bg-red-100 text-red-600'
-                  }`}>
-                    {transaction.type === 'received' ? (
-                      <ArrowDownLeft size={20} />
-                    ) : (
-                      <ArrowUpRight size={20} />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {transaction.type === 'received' ? 'Received from' : 'Sent to'}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {transaction.type === 'received' ? transaction.from : transaction.to}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={`font-semibold ${
-                    transaction.type === 'received' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {transaction.type === 'received' ? '+' : '-'}{formatAmount(transaction.amount)}
-                  </p>
-                  <p className="text-xs text-gray-500">{transaction.time}</p>
-                </div>
-              </div>
-              {index < recentTransactions.length - 1 && <Separator className="mt-4" />}
+          {recentTransactions.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No transactions yet</p>
+              <p className="text-sm">
+                Make your first payment to see transaction history
+              </p>
             </div>
-          ))}
+          ) : (
+            recentTransactions.map((transaction, index) => (
+              <div key={transaction.id}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        transaction.type === "received"
+                          ? "bg-green-100 text-green-600"
+                          : "bg-red-100 text-red-600"
+                      }`}
+                    >
+                      {transaction.type === "received" ? (
+                        <ArrowDownLeft size={20} />
+                      ) : (
+                        <ArrowUpRight size={20} />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {transaction.type === "received"
+                          ? "Received from"
+                          : "Sent to"}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {transaction.type === "received"
+                          ? transaction.sender
+                          : `***${transaction.recipientPhoneHash.slice(-6)}`}
+                      </p>
+                      {transaction.message && (
+                        <p className="text-xs text-gray-500 italic">
+                          &quot;{transaction.message}&quot;
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p
+                      className={`font-semibold ${
+                        transaction.type === "received"
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {transaction.type === "received" ? "+" : "-"}
+                      {formatAmount(transaction.amount)}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatTime(transaction.timestamp)}
+                    </p>
+                  </div>
+                </div>
+                {index < recentTransactions.length - 1 && (
+                  <Separator className="mt-4" />
+                )}
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
     </div>

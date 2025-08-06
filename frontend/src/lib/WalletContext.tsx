@@ -57,6 +57,14 @@ export function WalletProvider({ children }: WalletProviderProps) {
       const walletData: WalletData = JSON.parse(storedWalletData);
       console.log('🔄 Loading wallet:', walletData.walletAddress);
 
+      // Check if wallet has delegation for seamless payments
+      if ('delegation' in walletData && walletData.delegation) {
+        console.log('✨ Wallet has seamless payment delegation!');
+        console.log('🎯 All payments will be gasless and instant!');
+      } else {
+        console.log('⚠️ Wallet without delegation - may need approvals for payments');
+      }
+
       const walletInstance = new PadiPayWallet(walletData);
       setWallet(walletInstance);
 
@@ -138,11 +146,38 @@ export function usePayment() {
       throw new Error('Wallet not connected');
     }
 
-    const result = await wallet.sendPayment(toPhoneNumber, amount, message);
+    console.log('🚀 WalletContext: Using SEAMLESS payment (no approvals!)');
+    
+    // 🎯 Check if wallet has delegation, if not upgrade it
+    const storedData = localStorage.getItem('padiPayWallet');
+    const hasDelegate = storedData ? 'delegation' in JSON.parse(storedData) : false;
+    
+    if (!hasDelegate && typeof wallet.upgradeToDelegation === 'function') {
+      console.log('🔄 Wallet missing delegation - upgrading automatically...');
+      const upgradeResult = await wallet.upgradeToDelegation();
+      if (upgradeResult.success) {
+        console.log('✅ Wallet upgraded to seamless delegation!');
+      } else {
+        console.log('⚠️ Delegation upgrade failed:', upgradeResult.error);
+      }
+    }
+    
+    // Use seamless delegation payment
+    let result;
+    if (typeof wallet.sendSeamlessPayment === 'function') {
+      console.log('✨ Using seamless delegation payment');
+      result = await wallet.sendSeamlessPayment(toPhoneNumber, amount, message);
+    } else {
+      console.log('⚠️ Falling back to regular payment');
+      result = await wallet.sendPayment(toPhoneNumber, amount, message);
+    }
     
     // Refresh balance after successful payment
     if (result.success) {
+      console.log('✅ Payment successful, refreshing balance...');
       await refreshBalance();
+    } else if (result.needsDelegation) {
+      console.log('⚠️ User needs to set up delegation for seamless payments');
     }
     
     return result;
